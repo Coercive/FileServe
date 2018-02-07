@@ -19,7 +19,7 @@ use Symfony\Component\Yaml\Parser as YamlParser;
 class FileServe {
 
 	/** @var array MIME TYPE */
-	static private $_aMime = null;
+	static private $mime = null;
 
 	/** @var string FILE PATH */
 	private $_sFilePath = '';
@@ -35,22 +35,20 @@ class FileServe {
 	 *
 	 * @return array
 	 */
-	static private function _loadMime() {
-
+	static private function _loadMime(): array
+	{
 		# SINGLE LOAD
-		if(null !== self::$_aMime) { return self::$_aMime; }
+		if(null !== self::$mime) { return self::$mime; }
 
 		# File
-		$sMimePath = realpath(__DIR__ . '/mime.yml');
-		if(!$sMimePath || !file_exists($sMimePath) || !is_file($sMimePath)) { return self::$_aMime = []; }
+		$path = realpath(__DIR__ . '/mime.yml');
+		if(!$path || !is_file($path)) { return self::$mime = []; }
 
 		# Parse
-		$oYamlParser = new YamlParser;
-		$aCurrentYaml = $oYamlParser->parse(file_get_contents($sMimePath)) ?: [];
-		if(!$aCurrentYaml || !is_array($aCurrentYaml)) { return self::$_aMime = []; }
+		$yaml = (new YamlParser)->parse(file_get_contents($path)) ?: [];
+		if(!$yaml || !is_array($yaml)) { return self::$mime = []; }
 
-		return self::$_aMime = $aCurrentYaml;
-
+		return self::$mime = $yaml;
 	}
 
 	/**
@@ -58,43 +56,35 @@ class FileServe {
 	 *
 	 * prevent slashes and dots at start/end
 	 *
-	 * @param string $sPath
+	 * @param string $path
 	 * @return string
 	 */
-	private function _cleanPath($sPath) {
-		$sPath = trim($sPath, " \t\n\r\0\x0B/.");
-		$sPath = str_replace('//', '/', $sPath);
-		$sPath = str_replace('..', '', $sPath);
-		return realpath("/$sPath") ?: '';
-	}
-
-	/**
-	 * IS REGULAR FILE
-	 *
-	 * @return bool
-	 */
-	private function _isRegularFile() {
-		return ($this->_sFilePath && file_exists($this->_sFilePath) && is_file($this->_sFilePath));
+	private function _cleanPath(string $path): string
+	{
+		$path = trim($path, " \t\n\r\0\x0B/.");
+		$path = str_replace('//', '/', $path);
+		$path = str_replace('..', '', $path);
+		return realpath("/$path") ?: '';
 	}
 
 	/**
 	 * EXTRACT RANGE DATAS
 	 *
-	 * @param int $iFileStartByte
-	 * @param int $iFileEndByte
+	 * @param int $startByte
+	 * @param int $endByte
 	 * @return array
 	 */
-	private function _extractRangeDatas($iFileStartByte, $iFileEndByte) {
-
+	private function _extractRangeDatas(int $startByte, $endByte): array
+	{
 		# Base
-		$aRange = ['start' => $iFileStartByte, 'end' => $iFileEndByte];
+		$range = ['start' => $startByte, 'end' => $endByte];
 
 		# No datas
-		if(empty($_SERVER['HTTP_RANGE'])) { return $aRange; }
+		if(empty($_SERVER['HTTP_RANGE'])) { return $range; }
 
 		# Get
-		$aHttpRange = explode('=', $_SERVER['HTTP_RANGE'], 2);
-		if (empty($aHttpRange[0]) || $aHttpRange[0] !== 'bytes') {
+		$httpRange = explode('=', $_SERVER['HTTP_RANGE'], 2);
+		if (empty($httpRange[0]) || $httpRange[0] !== 'bytes') {
 			/*
 			  http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.4.17
 
@@ -114,43 +104,42 @@ class FileServe {
 			*/
 			return [];
 		}
-		if(!isset($aHttpRange[1])) { return $aRange; }
-		$sRange = $aHttpRange[1];
+		if(!isset($httpRange[1])) { return $range; }
+		$ranges = $httpRange[1];
 
 		# Multi Range is not handled yet
-		if (strpos($sRange, ',') !== false) { return []; }
+		if (strpos($ranges, ',') !== false) { return []; }
 
 		// If the range starts with an '-' we start from the beginning.
 		// If not, we forward the file pointer and make sure to get the end byte
 		// if spesified.
-		if ($sRange{0} === '-') {
+		if ($ranges{0} === '-') {
 			// The n-number of the last bytes is requested.
-			$iLastBytes = (int) substr($sRange, 1);
-			$aRange['start'] = $this->getFileSize() - $iLastBytes;
+			$lastBytes = (int) substr($ranges, 1);
+			$range['start'] = $this->getFileSize() - $lastBytes;
 		}
 		else {
-			$aRangeData  = explode('-', $sRange);
-			$aRange['start'] = (int) $aRangeData[0];
-			$aRange['end'] = (isset($aRangeData[1]) && is_numeric($aRangeData[1])) ? intval($aRangeData[1]) : $this->getFileSize();
+			$delimiters = explode('-', $ranges);
+			$range['start'] = (int) $delimiters[0];
+			$range['end'] = (isset($delimiters[1]) && is_numeric($delimiters[1])) ? intval($delimiters[1]) : $this->getFileSize();
 		}
 
 		// Check the range and make sure it's treated according to the specs.
 		// http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
 
-		# End bytes can not be larger than $iFileEndByte.
-		if($aRange['end'] > $iFileEndByte) { $aRange['end'] = $iFileEndByte; }
+		# End bytes can not be larger than $endByte.
+		if($range['end'] > $endByte) { $range['end'] = $endByte; }
 
 		// Validate the requested range and return an error if it's not correct.
-		if (   $aRange['start'] < 0
-			|| $aRange['start'] > $aRange['end']
-			|| $aRange['start'] > $this->getFileSize() - 1
-			|| $aRange['end'] >= $this->getFileSize()
+		if (   $range['start'] < 0
+			|| $range['start'] > $range['end']
+			|| $range['start'] > $this->getFileSize() - 1
+			|| $range['end'] >= $this->getFileSize()
 		) {
 			return [];
 		}
 
-		return $aRange;
-
+		return $range;
 	}
 
 	/**
@@ -158,21 +147,23 @@ class FileServe {
 	 *
 	 * @return void
 	 */
-	private function _provideContentTypeHeader() {
-		$sMime = $this->mimeType();
-		header("Content-Type: $sMime");
+	private function _provideContentTypeHeader(): void
+	{
+		header("Content-Type: {$this->mimeType()}");
 	}
 
 	/**
 	 * ETAG HEADER
 	 *
+	 * Enable resuamble download in IE9.
+	 * http://blogs.msdn.com/b/ieinternals/archive/2011/06/03/send-an-etag-to-enable-http-206-file-download-resume-without-restarting.aspx
+	 *
 	 * @return void
 	 */
-	private function _provideEtagHeader() {
-		# Enable resuamble download in IE9.
-		// http://blogs.msdn.com/b/ieinternals/archive/2011/06/03/send-an-etag-to-enable-http-206-file-download-resume-without-restarting.aspx
-		$sEtag = $this->etag(true);
-		if($sEtag) { header("Etag:  $sEtag"); }
+	private function _provideEtagHeader(): void
+	{
+		$etag = $this->etag(true);
+		if($etag) { header("Etag:  $etag"); }
 	}
 
 	/**
@@ -180,18 +171,20 @@ class FileServe {
 	 *
 	 * @return void
 	 */
-	private function _providePartialContentHeader() {
+	private function _providePartialContentHeader(): void
+	{
 		header('HTTP/1.1 206 Partial Content');
 	}
 
 	/**
 	 * CONTENT LENGTH HEADER
 	 *
-	 * @param int $iContentLength [optional]
+	 * @param int $length [optional]
 	 * @return void
 	 */
-	private function _provideContentLengthHeader($iContentLength = null) {
-		header("Content-Length: ". (null === $iContentLength ? $this->getFileSize() : $iContentLength));
+	private function _provideContentLengthHeader(int $length = null): void
+	{
+		header('Content-Length: ' . (null === $length ? $this->getFileSize() : $length));
 	}
 
 	/**
@@ -208,26 +201,28 @@ class FileServe {
 	 * (mediatype = mimetype)
 	 * as well as a boundry header to indicate the various chunks of data.
 	 *
-	 * @param int $iStartByte
-	 * @param int $iEndByte
+	 * @param int $startByte
+	 * @param int $endByte
 	 * @return void
 	 */
-	private function _provideAcceptRangesHeader($iStartByte, $iEndByte) {
+	private function _provideAcceptRangesHeader(int $startByte, int $endByte): void
+	{
 		header('Accept-Ranges: bytes');
 		// multipart/byteranges
 		// http://www.w3.org/Protocols/rfc2616/rfc2616-sec19.html#sec19.2
-		// header("Accept-Ranges: {$iStartByte}-{$iEndByte}");
+		// header("Accept-Ranges: {$startByte}-{$endByte}");
 	}
 
 	/**
 	 * CONTENT RANGE HEADER
 	 *
-	 * @param int $iStartByte
-	 * @param int $iEndByte
+	 * @param int $startByte
+	 * @param int $endByte
 	 * @return void
 	 */
-	private function _provideContentRangeHeader($iStartByte, $iEndByte) {
-		header("Content-Range: bytes $iStartByte-$iEndByte/{$this->getFileSize()}");
+	private function _provideContentRangeHeader(int $startByte, int $endByte): void
+	{
+		header("Content-Range: bytes $startByte-$endByte/{$this->getFileSize()}");
 	}
 
 	/**
@@ -235,11 +230,12 @@ class FileServe {
 	 *
 	 * @return bool
 	 */
-	private function _provideLastModifiedHeader() {
+	private function _provideLastModifiedHeader(): bool
+	{
 		# Handle caching
-		$iFileModTime = gmdate('D, d M Y H:i:s', filemtime($this->_sFilePath)).' GMT';
-		$aHeaders = getallheaders();
-		if(isset($aHeaders['If-Modified-Since']) && $aHeaders['If-Modified-Since'] === $iFileModTime) {
+		$modTime = gmdate('D, d M Y H:i:s', filemtime($this->_sFilePath)).' GMT';
+		$headers = getallheaders();
+		if(isset($headers['If-Modified-Since']) && $headers['If-Modified-Since'] === $modTime) {
 
 			# HEADER NOT MODIFIED
 			header('HTTP/1.1 304 Not Modified');
@@ -247,90 +243,74 @@ class FileServe {
 		}
 
 		# HEADER LAST MOD
-		header("Last-Modified: $iFileModTime");
-
+		header("Last-Modified: $modTime");
 		return true;
 	}
 
 	/**
 	 * RECURSE BUFFER LOOP
 	 *
-	 * @param int $iEnd
-	 * @param int $iBuffer [optional] 1 octet (1024 * 8)
+	 * @param int $end
+	 * @param int $buffer [optional] 1 octet (1024 * 8)
 	 * @return void
 	 * @throws Exception
 	 */
-	private function _recurseBufferLoop($iEnd, $iBuffer = 8192) {
-
+	private function _recurseBufferLoop(int $end, int $buffer = 8192): void
+	{
 		# End of file
-		if(@feof($this->_getFile())) {
-			return;
-		}
+		if(@feof($this->_getFile())) { return; }
 
 		# Check if we have outputted all the data requested
-		$iPosition = ftell($this->_getFile());
-		if($iPosition > $iEnd) {
-			return;
-		}
+		$position = ftell($this->_getFile());
+		if($position > $end) { return; }
 
 		# In case we're only outputtin a chunk, make sure we don't read past the length
-		if ($iPosition + $iBuffer > $iEnd) {
-			$iBuffer = $iEnd - $iPosition + 1;
-		}
+		if ($position + $buffer > $end) { $buffer = $end - $position + 1; }
 
 		# Reset time limit for big files
 		set_time_limit(0);
 
 		# Read the file part
-		$mChunk = fread($this->_getFile(), $iBuffer);
-		if(false === $mChunk) { throw new Exception('Read file chunk error : stop process'); }
-		echo $mChunk;
+		$chunk = fread($this->_getFile(), $buffer);
+		if(false === $chunk) { throw new Exception('Read file chunk error : stop process'); }
+		echo $chunk;
 
 		# Free up memory. Otherwise large files will trigger PHP's memory limit.
 		flush();
 
 		# Recursive
-		$this->_recurseBufferLoop($iEnd, $iBuffer);
+		$this->_recurseBufferLoop($end, $buffer);
 		return;
-
 	}
 
 	/**
 	 * FILE OPEN
 	 *
-	 * @return $this
+	 * @return void
 	 * @throws Exception
 	 */
-	private function _fileOpen() {
-
+	private function _fileOpen(): void
+	{
 		# Try open
 		$this->_rFile = @fopen($this->_sFilePath, 'rb');
 
 		# Verify
 		if(false === $this->_rFile) { throw new Exception("Can't open file : $this->_sFilePath."); }
-
-		# Maintain chainability
-		return $this;
-
 	}
 
 	/**
 	 * FILE OPEN
 	 *
-	 * @return $this
+	 * @return void
 	 * @throws Exception
 	 */
-	private function _fileClose() {
-
+	private function _fileClose(): void
+	{
 		# Verify
-		if(!$this->_rFile) { return $this; }
+		if(!$this->_rFile) { return; }
 
 		# Close
 		if(!fclose($this->_rFile)) { throw new Exception("Can't close file : $this->_sFilePath."); }
-
-		# Maintain chainability
-		return $this;
-
 	}
 
 	/**
@@ -338,26 +318,26 @@ class FileServe {
 	 *
 	 * @return resource
 	 */
-	private function _getFile() {
+	private function _getFile(): resource
+	{
 		return $this->_rFile;
 	}
 
 	/**
 	 * FileServe constructor.
 	 *
-	 * @param string $sFilePath
+	 * @param string $path
 	 * @throws Exception
 	 */
-	public function __construct($sFilePath) {
-
+	public function __construct(string $path)
+	{
 		# Set File
-		$this->_sFilePath = $this->_cleanPath($sFilePath);
+		$this->_sFilePath = $this->_cleanPath($path);
 
 		# Verify File
-		if(!$this->_isRegularFile()) {
-			throw new Exception('File does not exist or not regular file : ' . $sFilePath);
+		if(!$this->_sFilePath || !is_file($this->_sFilePath)) {
+			throw new Exception('File does not exist or not regular file : ' . $path);
 		}
-
 	}
 
 	/**
@@ -365,7 +345,8 @@ class FileServe {
 	 *
 	 * @return int
 	 */
-	public function getFileSize() {
+	public function getFileSize(): int
+	{
 		if(null !== $this->_iFileSize) { return $this->_iFileSize; }
 		return $this->_iFileSize = filesize($this->_sFilePath) ?: 0;
 	}
@@ -379,49 +360,50 @@ class FileServe {
 	 * @link http://en.wikipedia.org/wiki/HTTP_ETag
 	 * @link http://blogs.msdn.com/b/ieinternals/archive/2011/06/03/send-an-etag-to-enable-http-206-file-download-resume-without-restarting.aspx
 	 *
-	 * @param bool $bQuote [optional]
+	 * @param bool $quote [optional]
 	 * @return string
 	 */
-	public function etag($bQuote = true) {
-
+	public function etag(bool $quote = true): string
+	{
 		# Get Infos
-		$aInfo = stat($this->_sFilePath);
-		if (!$aInfo || !isset($aInfo['ino']) || !isset($aInfo['size']) || !isset($aInfo['mtime'])) { return ''; }
+		$info = stat($this->_sFilePath);
+		if (!$info || !isset($info['ino']) || !isset($info['size']) || !isset($info['mtime'])) { return ''; }
 
 		# Additionnal Quotes
-		$q = ($bQuote) ? '"' : '';
+		$q = ($quote) ? '"' : '';
 
 		# Etag
-		return sprintf("$q%x-%x-%x$q", $aInfo['ino'], $aInfo['size'], $aInfo['mtime']);
-
+		return sprintf("$q%x-%x-%x$q", $info['ino'], $info['size'], $info['mtime']);
 	}
 
 	/**
 	 * SEND FILE FOR CLIENT DOWNLOAD
+	 *
+	 * @return void
 	 */
-	public function download() {
-
+	public function download(): void
+	{
 		# Headers
 		$this->_provideContentTypeHeader();
 		$this->_provideContentLengthHeader();
 		$this->_provideEtagHeader();
 
 		# Skip if file as not modified since last client cache
-		if(!$this->_provideLastModifiedHeader()) {
-			exit;
-		}
+		if(!$this->_provideLastModifiedHeader()) { exit; }
 
 		# Read the file
-		readfile($sFilePath);
+		readfile($this->_sFilePath);
 		exit;
-
 	}
 
 	/**
 	 * SEND FILE FOR CLIENT DOWNLOAD
+	 * 
+	 * @return void
+	 * @throws Exception
 	 */
-	public function range() {
-
+	public function range(): void
+	{
 		# Clears the cache and prevent unwanted output
 		# Do not send cache limiter header
 		@ob_clean();
@@ -435,12 +417,12 @@ class FileServe {
 		$this->_provideEtagHeader();
 
 		# Init
-		$iContentLength = $this->getFileSize();
-		$iStartByte = 0;
-		$iEndByte = $this->getFileSize() - 1;
+		$length = $this->getFileSize();
+		$startByte = 0;
+		$endByte = $this->getFileSize() - 1;
 
 		# Header Range
-		$this->_provideAcceptRangesHeader(0, $iContentLength);
+		$this->_provideAcceptRangesHeader(0, $length);
 
 		# Classic process if no request range
 		if (empty($_SERVER['HTTP_RANGE'])) {
@@ -449,8 +431,8 @@ class FileServe {
 			$this->_provideContentLengthHeader();
 
 			# Try read the file
-			$bReadStatus = @readfile($this->_sFilePath);
-			if(false === $bReadStatus) { throw new Exception('ReadFile error, with no range : stop process'); }
+			$status = @readfile($this->_sFilePath);
+			if(false === $status) { throw new Exception('ReadFile error, with no range : stop process'); }
 
 			// and flush the buffer
 			flush();
@@ -458,30 +440,30 @@ class FileServe {
 		}
 
 		# Extract the range string
-		$aRange = $this->_extractRangeDatas($iStartByte, $iEndByte);
-		if (!$aRange) {
+		$range = $this->_extractRangeDatas($startByte, $endByte);
+		if (!$range) {
 			header('HTTP/1.1 416 Requested Range Not Satisfiable');
-			$this->_provideContentRangeHeader($iStartByte, $iEndByte);
+			$this->_provideContentRangeHeader($startByte, $endByte);
 			throw new Exception('Requested Range Not Satisfiable');
 		}
 
 		# Init new processed range
-		$iStartByte  = $aRange['start'];
-		$iEndByte    = $aRange['end'];
+		$startByte  = $range['start'];
+		$endByte    = $range['end'];
 
 		# Calculate new content length
-		$iContentLength = $iEndByte - $iStartByte + 1;
+		$length = $endByte - $startByte + 1;
 
 		# Notify the client the byte range we'll be outputting
 		$this->_providePartialContentHeader();
-		$this->_provideContentRangeHeader($iStartByte, $iEndByte);
-		$this->_provideContentLengthHeader($iContentLength);
+		$this->_provideContentRangeHeader($startByte, $endByte);
+		$this->_provideContentLengthHeader($length);
 
 		# Open file for read / stream
 		$this->_fileOpen();
 
 		# Init pointer start
-		fseek($this->_getFile(), $iStartByte);
+		fseek($this->_getFile(), $startByte);
 
 		/*
 		 * Ensure output buffering is off. It appeared to yield 1 on an default WAMP
@@ -493,11 +475,10 @@ class FileServe {
 		@ob_end_clean();
 
 		// Start buffered download
-		$this->_recurseBufferLoop($iEndByte);
+		$this->_recurseBufferLoop($endByte);
 
 		# Close file
 		$this->_fileClose();
-
 	}
 
 	/**
@@ -505,24 +486,23 @@ class FileServe {
 	 *
 	 * @return string
 	 */
-	public function mimeType() {
-
-		/** @var string $sFileExt */
-		$sFileExt = strtolower(pathinfo($this->_sFilePath, PATHINFO_EXTENSION));
-		if(!$sFileExt) { return "unknown/unknown"; }
+	public function mimeType(): string
+	{
+		# Detect extension
+		$ext = strtolower(pathinfo($this->_sFilePath, PATHINFO_EXTENSION));
+		if(!$ext) { return "unknown/unknown"; }
 
 		# Mime List
-		$aMimes = self::_loadMime();
+		self::_loadMime();
 
 		# Get Mime
-		if(isset($aMimes[$sFileExt])) { return $aMimes[$sFileExt]; }
+		if(isset(self::$mime[$ext])) { return self::$mime[$ext]; }
 
 		# Default Ouput
 		if(function_exists('mime_content_type')) {
-			$sMime = mime_content_type($this->_sFilePath);
-			if($sMime) { return $sMime; }
+			$mime = mime_content_type($this->_sFilePath);
+			if($mime) { return $mime; }
 		}
-		return "unknown/$sFileExt";
-
+		return "unknown/$ext";
 	}
 }

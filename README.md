@@ -15,11 +15,21 @@ Usage
 ```php
 use Coercive\Utility\FileServe;
 
-# Old
+# V1
 FileServe::output('/path/file.extension');
 
-# ! need to be updated
-# $oServe = new FileServe('/path/file.mp4');
-# $oServe->range();
+##################
+
+# V2
+$serve = new FileServe('/path/file.extension');
+
+# Send range
+$oServe->range();
+
+# Send direct download
+$serve->download();
+
+# Get mime
+$string = $oServe->mimeType();
 
 ```
