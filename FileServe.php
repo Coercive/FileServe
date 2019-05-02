@@ -6,36 +6,37 @@ use Symfony\Component\Yaml\Parser as YamlParser;
 
 /**
  * ServeFile
- * PHP Version 5
- *
- * @version		2
+ * 
  * @package 	Coercive\Utility\FileServe
  * @link		https://github.com/Coercive/FileServe
  *
  * @author  	Anthony Moral <contact@coercive.fr>
- * @copyright   (c) 2016 - 2017 Anthony Moral
- * @license 	http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
+ * @copyright   (c) 2019 Anthony Moral
+ * @license 	MIT
  */
-class FileServe {
-
+class FileServe
+{
 	/** @var array MIME TYPE */
 	static private $mime = null;
 
 	/** @var string FILE PATH */
-	private $_sFilePath = '';
+	private $path = '';
 
 	/** @var int FILE SIZE */
-	private $_iFileSize = null;
+	private $size = null;
 
 	/** @var resource FILE */
-	private $_rFile = null;
+	private $resource = null;
+
+	/** @var bool Active the no cache header */
+	private $cache = false;
 
 	/**
 	 * LOAD MIME TYPE LIST
 	 *
 	 * @return array
 	 */
-	static private function _loadMime(): array
+	static private function loadMime(): array
 	{
 		# SINGLE LOAD
 		if(null !== self::$mime) { return self::$mime; }
@@ -59,7 +60,7 @@ class FileServe {
 	 * @param string $path
 	 * @return string
 	 */
-	private function _cleanPath(string $path): string
+	private function cleanPath(string $path): string
 	{
 		$path = trim($path, " \t\n\r\0\x0B/.");
 		$path = str_replace('//', '/', $path);
@@ -74,7 +75,7 @@ class FileServe {
 	 * @param int $endByte
 	 * @return array
 	 */
-	private function _extractRangeDatas(int $startByte, $endByte): array
+	private function extractRangeDatas(int $startByte, int $endByte): array
 	{
 		# Base
 		$range = ['start' => $startByte, 'end' => $endByte];
@@ -116,12 +117,12 @@ class FileServe {
 		if ($ranges{0} === '-') {
 			// The n-number of the last bytes is requested.
 			$lastBytes = (int) substr($ranges, 1);
-			$range['start'] = $this->getFileSize() - $lastBytes;
+			$range['start'] = $this->getSize() - $lastBytes;
 		}
 		else {
 			$delimiters = explode('-', $ranges);
 			$range['start'] = (int) $delimiters[0];
-			$range['end'] = (isset($delimiters[1]) && is_numeric($delimiters[1])) ? intval($delimiters[1]) : $this->getFileSize();
+			$range['end'] = (isset($delimiters[1]) && is_numeric($delimiters[1])) ? intval($delimiters[1]) : $this->getSize();
 		}
 
 		// Check the range and make sure it's treated according to the specs.
@@ -133,8 +134,8 @@ class FileServe {
 		// Validate the requested range and return an error if it's not correct.
 		if (   $range['start'] < 0
 			|| $range['start'] > $range['end']
-			|| $range['start'] > $this->getFileSize() - 1
-			|| $range['end'] >= $this->getFileSize()
+			|| $range['start'] > $this->getSize() - 1
+			|| $range['end'] >= $this->getSize()
 		) {
 			return [];
 		}
@@ -143,52 +144,125 @@ class FileServe {
 	}
 
 	/**
-	 * CONTENT TYPE HEADER
+	 * Ensure output buffering is off. It appeared to yield 1 on an default WAMP
+	 * installation. When clicking the download the hour glass would spin for a
+	 * while and the file dialog took a while to appear. When it finally did the
+	 * 214MB file downloaded only 128MB before a fatal PHP error was thrown,
+	 * complaining about memory being exhausted.
 	 *
 	 * @return void
 	 */
-	private function _provideContentTypeHeader(): void
+	private function cleanBuffer()
 	{
-		header("Content-Type: {$this->mimeType()}");
+		@ob_end_clean();
 	}
 
 	/**
-	 * ETAG HEADER
+	 * HEADER : no cache
+	 *
+	 * @return void
+	 */
+	private function headerNoCache()
+	{
+		header('Pragma: public');
+		header('Expires: 0');
+		header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+		header('Cache-Control: private', false);
+	}
+
+	/**
+	 * HEADER : transfer encoding
+	 * same as 8-bit, but with no length limit
+	 *
+	 * @return void
+	 */
+	private function headerContentTransferEncoding()
+	{
+		header('Content-Transfer-Encoding: binary');
+	}
+
+	/**
+	 * HEADER : content disposition
+	 *
+	 * @param bool $forceDownload [optional]
+	 * @param string $filename [optional]
+	 */
+	private function headerContentDisposition(bool $forceDownload = true, string $filename = '')
+	{
+		$header = 'Content-Disposition:';
+		$options = [];
+		if ($forceDownload) {
+			$options[] = 'attachment';
+		}
+		if ($filename) {
+			$options[] = 'filename="' . $filename . '"';
+		}
+		else {
+			$options[] = 'filename="' . basename($this->path) . '"';
+		}
+		if($options) {
+			header('Content-Disposition: ' . implode('; ', $options));
+		}
+	}
+
+	/**
+	 * HEADER : content description
+	 *
+	 * @return void
+	 */
+	private function headerContentDescription()
+	{
+		header('Content-Description: File Transfer');
+	}
+
+	/**
+	 * HEADER : content type
+	 *
+	 * @param string $filename [optional]
+	 * @return void
+	 */
+	private function headerContentType(string $filename = '')
+	{
+		header("Content-Type: {$this->mimeType($filename)}");
+	}
+
+	/**
+	 * HEADER etag
 	 *
 	 * Enable resuamble download in IE9.
 	 * http://blogs.msdn.com/b/ieinternals/archive/2011/06/03/send-an-etag-to-enable-http-206-file-download-resume-without-restarting.aspx
 	 *
 	 * @return void
 	 */
-	private function _provideEtagHeader(): void
+	private function headerEtag()
 	{
 		$etag = $this->etag(true);
 		if($etag) { header("Etag:  $etag"); }
 	}
 
 	/**
-	 * PARTIAL CONTENT HEADER
+	 * HEADER : partial content
 	 *
 	 * @return void
 	 */
-	private function _providePartialContentHeader(): void
+	private function headerPartialContent()
 	{
 		header('HTTP/1.1 206 Partial Content');
 	}
 
 	/**
-	 * CONTENT LENGTH HEADER
+	 * HEADER : content length
 	 *
 	 * @param int $length [optional]
 	 * @return void
 	 */
-	private function _provideContentLengthHeader(int $length = null): void
+	private function headerContentLength(int $length = null)
 	{
-		header('Content-Length: ' . (null === $length ? $this->getFileSize() : $length));
+		header('Content-Length: ' . (null === $length ? $this->getSize() : $length));
 	}
 
 	/**
-	 * ACCEPT RANGES HEADER
+	 * HEADER : accept ranges
 	 *
 	 * At the moment we only support single ranges.
 	 * Multiple ranges requires some more work to ensure it works correctly
@@ -205,7 +279,7 @@ class FileServe {
 	 * @param int $endByte
 	 * @return void
 	 */
-	private function _provideAcceptRangesHeader(int $startByte, int $endByte): void
+	private function headerAcceptRanges(int $startByte, int $endByte)
 	{
 		header('Accept-Ranges: bytes');
 		// multipart/byteranges
@@ -214,26 +288,26 @@ class FileServe {
 	}
 
 	/**
-	 * CONTENT RANGE HEADER
+	 * HEADER : content range
 	 *
 	 * @param int $startByte
 	 * @param int $endByte
 	 * @return void
 	 */
-	private function _provideContentRangeHeader(int $startByte, int $endByte): void
+	private function headerContentRange(int $startByte, int $endByte)
 	{
-		header("Content-Range: bytes $startByte-$endByte/{$this->getFileSize()}");
+		header("Content-Range: bytes $startByte-$endByte/{$this->getSize()}");
 	}
 
 	/**
-	 * LAST MODIFIED HEADER
+	 * HEADER : last modified
 	 *
 	 * @return bool
 	 */
-	private function _provideLastModifiedHeader(): bool
+	private function headerLastModified(): bool
 	{
 		# Handle caching
-		$modTime = gmdate('D, d M Y H:i:s', filemtime($this->_sFilePath)).' GMT';
+		$modTime = gmdate('D, d M Y H:i:s', filemtime($this->path)).' GMT';
 		$headers = getallheaders();
 		if(isset($headers['If-Modified-Since']) && $headers['If-Modified-Since'] === $modTime) {
 
@@ -255,13 +329,13 @@ class FileServe {
 	 * @return void
 	 * @throws Exception
 	 */
-	private function _recurseBufferLoop(int $end, int $buffer = 8192): void
+	private function recurseBufferLoop(int $end, int $buffer = 8192)
 	{
 		# End of file
-		if(@feof($this->_getFile())) { return; }
+		if(@feof($this->get())) { return; }
 
 		# Check if we have outputted all the data requested
-		$position = ftell($this->_getFile());
+		$position = ftell($this->get());
 		if($position > $end) { return; }
 
 		# In case we're only outputtin a chunk, make sure we don't read past the length
@@ -271,7 +345,7 @@ class FileServe {
 		set_time_limit(0);
 
 		# Read the file part
-		$chunk = fread($this->_getFile(), $buffer);
+		$chunk = fread($this->get(), $buffer);
 		if(false === $chunk) { throw new Exception('Read file chunk error : stop process'); }
 		echo $chunk;
 
@@ -279,7 +353,7 @@ class FileServe {
 		flush();
 
 		# Recursive
-		$this->_recurseBufferLoop($end, $buffer);
+		$this->recurseBufferLoop($end, $buffer);
 		return;
 	}
 
@@ -289,13 +363,10 @@ class FileServe {
 	 * @return void
 	 * @throws Exception
 	 */
-	private function _fileOpen(): void
+	private function open()
 	{
-		# Try open
-		$this->_rFile = @fopen($this->_sFilePath, 'rb');
-
-		# Verify
-		if(false === $this->_rFile) { throw new Exception("Can't open file : $this->_sFilePath."); }
+		$this->resource = @fopen($this->path, 'rb');
+		if(false === $this->resource) { throw new Exception("Can't open file : $this->path."); }
 	}
 
 	/**
@@ -304,13 +375,13 @@ class FileServe {
 	 * @return void
 	 * @throws Exception
 	 */
-	private function _fileClose(): void
+	private function close()
 	{
 		# Verify
-		if(!$this->_rFile) { return; }
+		if(!$this->resource) { return; }
 
 		# Close
-		if(!fclose($this->_rFile)) { throw new Exception("Can't close file : $this->_sFilePath."); }
+		if(!fclose($this->resource)) { throw new Exception("Can't close file : $this->path."); }
 	}
 
 	/**
@@ -318,26 +389,57 @@ class FileServe {
 	 *
 	 * @return resource
 	 */
-	private function _getFile(): resource
+	private function get(): resource
 	{
-		return $this->_rFile;
+		return $this->resource;
 	}
 
 	/**
 	 * FileServe constructor.
 	 *
 	 * @param string $path
+	 * @return void
 	 * @throws Exception
 	 */
 	public function __construct(string $path)
 	{
-		# Set File
-		$this->_sFilePath = $this->_cleanPath($path);
-
-		# Verify File
-		if(!$this->_sFilePath || !is_file($this->_sFilePath)) {
+		$this->path = $this->cleanPath($path);
+		if(!$this->path || !is_file($this->path)) {
 			throw new Exception('File does not exist or not regular file : ' . $path);
 		}
+	}
+
+	/**
+	 * Try to close file if opened
+	 *
+	 * @return void
+	 * @throws Exception
+	 */
+	public function __destruct()
+	{
+		$this->close();
+	}
+
+	/**
+	 * Do not send the no cache header
+	 *
+	 * @return FileServe
+	 */
+	public function enableCache(): FileServe
+	{
+		$this->cache = true;
+		return $this;
+	}
+
+	/**
+	 * Send the no cache header
+	 *
+	 * @return FileServe
+	 */
+	public function disableCache(): FileServe
+	{
+		$this->cache = false;
+		return $this;
 	}
 
 	/**
@@ -345,10 +447,10 @@ class FileServe {
 	 *
 	 * @return int
 	 */
-	public function getFileSize(): int
+	public function getSize(): int
 	{
-		if(null !== $this->_iFileSize) { return $this->_iFileSize; }
-		return $this->_iFileSize = filesize($this->_sFilePath) ?: 0;
+		if(null !== $this->size) { return $this->size; }
+		return $this->size = filesize($this->path) ?: 0;
 	}
 
 	/**
@@ -366,7 +468,7 @@ class FileServe {
 	public function etag(bool $quote = true): string
 	{
 		# Get Infos
-		$info = stat($this->_sFilePath);
+		$info = stat($this->path);
 		if (!$info || !isset($info['ino']) || !isset($info['size']) || !isset($info['mtime'])) { return ''; }
 
 		# Additionnal Quotes
@@ -377,32 +479,73 @@ class FileServe {
 	}
 
 	/**
-	 * SEND FILE FOR CLIENT DOWNLOAD
+	 * Send file for client
 	 *
+	 * @param string $filename [optional]
 	 * @return void
 	 */
-	public function download(): void
+	public function serve(string $filename = '')
 	{
 		# Headers
-		$this->_provideContentTypeHeader();
-		$this->_provideContentLengthHeader();
-		$this->_provideEtagHeader();
+		if(!$this->cache) { $this->headerNoCache(); }
+		$this->headerContentDescription();
+		$this->headerContentTransferEncoding();
+		$this->headerContentType($filename);
+		$this->headerContentLength();
+		$this->headerEtag();
 
 		# Skip if file as not modified since last client cache
-		if(!$this->_provideLastModifiedHeader()) { exit; }
+		if(!$this->headerLastModified()) { return; }
 
 		# Read the file
-		readfile($this->_sFilePath);
-		exit;
+		readfile($this->path);
+		$this->cleanBuffer();
 	}
 
 	/**
-	 * SEND FILE FOR CLIENT DOWNLOAD
+	 * Send file for client with apache x-send-file mod
+	 *
+	 * @link https://tn123.org/mod_xsendfile/
+	 *
+	 * @return void
+	 */
+	public function XSendFile(bool $forceDownload = true, string $filename = '')
+	{
+		header('X-Sendfile: ' . $this->path);
+		header('Content-Type: application/octet-stream');
+		$this->headerContentDisposition($forceDownload, $filename);
+		$this->cleanBuffer();
+	}
+
+	/**
+	 * Send file for download
+	 *
+	 * @param bool $forceDownload [optional]
+	 * @param string $filename [optional]
+	 * @return void
+	 */
+	public function download(bool $forceDownload = true, string $filename = '')
+	{
+		if(!$this->cache) { $this->headerNoCache(); }
+		$this->headerContentDescription();
+		$this->headerContentTransferEncoding();
+		$this->headerContentType($filename);
+		$this->headerContentLength();
+		$this->headerEtag();
+		$this->headerContentDisposition($forceDownload, $filename);
+
+		# Read the file
+		readfile($this->path);
+		$this->cleanBuffer();
+	}
+
+	/**
+	 * Send range bytes of file for client
 	 * 
 	 * @return void
 	 * @throws Exception
 	 */
-	public function range(): void
+	public function range()
 	{
 		# Clears the cache and prevent unwanted output
 		# Do not send cache limiter header
@@ -413,57 +556,57 @@ class FileServe {
 		@ini_set('session.cache_limiter','none');
 
 		# Headers
-		$this->_provideContentTypeHeader();
-		$this->_provideEtagHeader();
+		$this->headerContentType();
+		$this->headerEtag();
 
 		# Init
-		$length = $this->getFileSize();
+		$length = $this->getSize();
 		$startByte = 0;
-		$endByte = $this->getFileSize() - 1;
+		$endByte = $this->getSize() - 1;
 
 		# Header Range
-		$this->_provideAcceptRangesHeader(0, $length);
+		$this->headerAcceptRanges(0, $length);
 
 		# Classic process if no request range
 		if (empty($_SERVER['HTTP_RANGE'])) {
 
 			// It's not a range request, output the file anyway
-			$this->_provideContentLengthHeader();
+			$this->headerContentLength();
 
 			# Try read the file
-			$status = @readfile($this->_sFilePath);
+			$status = @readfile($this->path);
 			if(false === $status) { throw new Exception('ReadFile error, with no range : stop process'); }
 
 			// and flush the buffer
 			flush();
-			exit;
+			return;
 		}
 
 		# Extract the range string
-		$range = $this->_extractRangeDatas($startByte, $endByte);
+		$range = $this->extractRangeDatas($startByte, $endByte);
 		if (!$range) {
 			header('HTTP/1.1 416 Requested Range Not Satisfiable');
-			$this->_provideContentRangeHeader($startByte, $endByte);
+			$this->headerContentRange($startByte, $endByte);
 			throw new Exception('Requested Range Not Satisfiable');
 		}
 
 		# Init new processed range
-		$startByte  = $range['start'];
-		$endByte    = $range['end'];
+		$startByte = $range['start'];
+		$endByte = $range['end'];
 
 		# Calculate new content length
 		$length = $endByte - $startByte + 1;
 
 		# Notify the client the byte range we'll be outputting
-		$this->_providePartialContentHeader();
-		$this->_provideContentRangeHeader($startByte, $endByte);
-		$this->_provideContentLengthHeader($length);
+		$this->headerPartialContent();
+		$this->headerContentRange($startByte, $endByte);
+		$this->headerContentLength($length);
 
 		# Open file for read / stream
-		$this->_fileOpen();
+		$this->open();
 
 		# Init pointer start
-		fseek($this->_getFile(), $startByte);
+		fseek($this->get(), $startByte);
 
 		/*
 		 * Ensure output buffering is off. It appeared to yield 1 on an default WAMP
@@ -475,32 +618,31 @@ class FileServe {
 		@ob_end_clean();
 
 		// Start buffered download
-		$this->_recurseBufferLoop($endByte);
+		$this->recurseBufferLoop($endByte);
 
 		# Close file
-		$this->_fileClose();
+		$this->close();
 	}
 
 	/**
-	 * MIME TYPE
+	 * Get mime type of the target file or for the given filename
 	 *
+	 * @param string $filename [optional]
 	 * @return string
 	 */
-	public function mimeType(): string
+	public function mimeType(string $filename = ''): string
 	{
 		# Detect extension
-		$ext = strtolower(pathinfo($this->_sFilePath, PATHINFO_EXTENSION));
+		$ext = strtolower(pathinfo($filename ?: $this->path, PATHINFO_EXTENSION));
 		if(!$ext) { return "unknown/unknown"; }
 
-		# Mime List
-		self::_loadMime();
-
-		# Get Mime
+		# Mime list
+		self::loadMime();
 		if(isset(self::$mime[$ext])) { return self::$mime[$ext]; }
 
 		# Default Ouput
 		if(function_exists('mime_content_type')) {
-			$mime = mime_content_type($this->_sFilePath);
+			$mime = mime_content_type($filename ?: $this->path);
 			if($mime) { return $mime; }
 		}
 		return "unknown/$ext";
