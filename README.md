@@ -12,24 +12,48 @@ composer require coercive/fileserve
 Usage
 -----
 
+V1
+--
 ```php
 use Coercive\Utility\FileServe;
 
-# V1
+# Serve file
 FileServe::output('/path/file.extension');
+```
 
-##################
+V2
+--
+```php
+use Coercive\Utility\FileServe;
 
 # V2
 $serve = new FileServe('/path/file.extension');
 
 # Send range
-$oServe->range();
+$serve->range();
 
-# Send direct download
+# Serve file
+$serve->serve();
+
+# Send download
 $serve->download();
 
 # Get mime
-$string = $oServe->mimeType();
+$string = $serve->mimeType();
 
+# Get filesize
+$string = $serve->getSize();
+
+```
+
+Options
+
+```php
+# Enable / Disable header no cache options
+$serve->enableCache()
+$serve->disableCache()
+
+# Enable / Disable header content disposition filename for html5 attr : <a download="filename">
+$serve->enableFilename()
+$serve->disableFilename()
 ```
