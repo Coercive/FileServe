@@ -31,6 +31,9 @@ class FileServe
 	/** @var bool Active the no cache header */
 	private $cache = false;
 
+	/** @var bool Active the no-named file */
+	private $filename = true;
+
 	/**
 	 * LOAD MIME TYPE LIST
 	 *
@@ -194,11 +197,13 @@ class FileServe
 		if ($forceDownload) {
 			$options[] = 'attachment';
 		}
-		if ($filename) {
-			$options[] = 'filename="' . $filename . '"';
-		}
-		else {
-			$options[] = 'filename="' . basename($this->path) . '"';
+		if($this->filename) {
+			if ($filename) {
+				$options[] = 'filename="' . $filename . '"';
+			}
+			else {
+				$options[] = 'filename="' . basename($this->path) . '"';
+			}
 		}
 		if($options) {
 			header('Content-Disposition: ' . implode('; ', $options));
@@ -439,6 +444,30 @@ class FileServe
 	public function disableCache(): FileServe
 	{
 		$this->cache = false;
+		return $this;
+	}
+
+	/**
+	 * (Content-Disposition)
+	 * Send the file name
+	 *
+	 * @return FileServe
+	 */
+	public function enableFilename(): FileServe
+	{
+		$this->filename = true;
+		return $this;
+	}
+
+	/**
+	 * (Content-Disposition)
+	 * Do not send the file name
+	 *
+	 * @return FileServe
+	 */
+	public function disableFilename(): FileServe
+	{
+		$this->filename = false;
 		return $this;
 	}
 
