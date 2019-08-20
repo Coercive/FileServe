@@ -2,7 +2,6 @@
 namespace Coercive\Utility\FileServe;
 
 use Exception;
-use Symfony\Component\Yaml\Parser as YamlParser;
 
 /**
  * ServeFile
@@ -16,9 +15,6 @@ use Symfony\Component\Yaml\Parser as YamlParser;
  */
 class FileServe
 {
-	/** @var array MIME TYPE */
-	static private $mime = null;
-
 	/** @var string FILE PATH */
 	private $path = '';
 
@@ -33,27 +29,6 @@ class FileServe
 
 	/** @var bool Active the no-named file */
 	private $filename = true;
-
-	/**
-	 * LOAD MIME TYPE LIST
-	 *
-	 * @return array
-	 */
-	static private function loadMime(): array
-	{
-		# SINGLE LOAD
-		if(null !== self::$mime) { return self::$mime; }
-
-		# File
-		$path = realpath(__DIR__ . '/mime.yml');
-		if(!$path || !is_file($path)) { return self::$mime = []; }
-
-		# Parse
-		$yaml = (new YamlParser)->parse(file_get_contents($path)) ?: [];
-		if(!$yaml || !is_array($yaml)) { return self::$mime = []; }
-
-		return self::$mime = $yaml;
-	}
 
 	/**
 	 * CLEAN PATH
@@ -665,15 +640,10 @@ class FileServe
 		$ext = strtolower(pathinfo($filename ?: $this->path, PATHINFO_EXTENSION));
 		if(!$ext) { return "unknown/unknown"; }
 
-		# Mime list
-		self::loadMime();
-		if(isset(self::$mime[$ext])) { return self::$mime[$ext]; }
+		# Detect Mime with ralouphie/mimey
+		$mimey = new \Mimey\MimeTypes;
+		$mime = (string) $mimey->getMimeType($ext);
 
-		# Default Ouput
-		if(function_exists('mime_content_type')) {
-			$mime = mime_content_type($this->path);
-			if($mime) { return $mime; }
-		}
-		return "unknown/$ext";
+		return $mime ?: "unknown/$ext";
 	}
 }
