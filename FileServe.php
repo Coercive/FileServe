@@ -11,7 +11,7 @@ use Symfony\Component\Yaml\Parser as YamlParser;
  * @link		https://github.com/Coercive/FileServe
  *
  * @author  	Anthony Moral <contact@coercive.fr>
- * @copyright   (c) 2019 Anthony Moral
+ * @copyright   (c) 2019
  * @license 	MIT
  */
 class FileServe
@@ -671,7 +671,7 @@ class FileServe
 
 		# Default Ouput
 		if(function_exists('mime_content_type')) {
-			$mime = mime_content_type($filename ?: $this->path);
+			$mime = mime_content_type($this->path);
 			if($mime) { return $mime; }
 		}
 		return "unknown/$ext";
