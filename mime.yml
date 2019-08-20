@@ -1,10 +1,17 @@
 3dm: x-world/x-3dmf
 3dmf: x-world/x-3dmf
+3gp: video/3gpp
+3gp: audio/3gpp
+3g2: video/3gpp2
+3g2: audio/3gpp2
+7z: application/x-7z-compressed
 a: application/octet-stream
 aab: application/x-authorware-bin
+aac: audio/aac
 aam: application/x-authorware-map
 aas: application/x-authorware-seg
 abc: text/vnd.abc
+abw: application/x-abiword
 acgi: text/html
 afl: video/animaflex
 ai: application/postscript
@@ -36,6 +43,7 @@ avi: video/avi
 avi: video/msvideo
 avi: video/x-msvideo
 avs: video/avs-video
+azw: application/vnd.amazon.ebook
 bcpio: application/x-bcpio
 bin: application/mac-binary
 bin: application/macbinary
@@ -86,6 +94,7 @@ csh: application/x-csh
 csh: text/x-script.csh
 css: application/x-pointplus
 css: text/css
+csv: text/csv
 cxx: text/plain
 dcr: application/x-director
 deepv: application/x-deepv
@@ -96,6 +105,7 @@ dir: application/x-director
 dl: video/dl
 dl: video/x-dl
 doc: application/msword
+docx: application/vnd.openxmlformats-officedocument.wordprocessingml.document
 dot: application/msword
 dp: application/commonground
 drw: application/drafting
@@ -115,6 +125,8 @@ el: text/x-script.elisp
 elc: application/x-bytecode.elisp (compiled elisp)
 elc: application/x-elc
 env: application/x-envoy
+eot: application/vnd.ms-fontobject
+epub: application/epub+zip
 eps: application/postscript
 es: application/x-esrehber
 etx: text/x-setext
@@ -182,6 +194,7 @@ htt: text/webviewhtml
 htx: text/html
 ice: x-conference/x-cooltalk
 ico: image/x-icon
+ics: text/calendar
 idc: text/plain
 ief: image/ief
 iefs: image/ief
@@ -200,6 +213,7 @@ iv: application/x-inventor
 ivr: i-world/i-vrml
 ivy: application/x-livescreen
 jam: audio/x-jam
+jar: application/java-archive
 jav: text/plain
 jav: text/x-java-source
 java: text/plain
@@ -220,6 +234,7 @@ js: application/javascript
 js: application/ecmascript
 js: text/javascript
 js: text/ecmascript
+json: application/json
 jut: image/jutvision
 kar: audio/midi
 kar: music/x-karaoke
@@ -309,6 +324,7 @@ mpeg: video/mpeg
 mpg: audio/mpeg
 mpg: video/mpeg
 mpga: audio/mpeg
+mpkg: application/vnd.apple.installer+xml
 mpp: application/vnd.ms-project
 mpt: application/x-project
 mpv: application/x-project
@@ -329,9 +345,16 @@ nsc: application/x-conference
 nvd: application/x-navidoc
 o: application/octet-stream
 oda: application/oda
+odp: application/vnd.oasis.opendocument.presentation
+ods: application/vnd.oasis.opendocument.spreadsheet
+odt: application/vnd.oasis.opendocument.text
+oga: audio/ogg
+ogv: video/ogg
+ogx: application/ogg
 omc: application/x-omc
 omcd: application/x-omcdatamaker
 omcr: application/x-omcregerator
+otf: font/otf
 p: text/x-pascal
 p10: application/pkcs10
 p10: application/x-pkcs10
@@ -382,6 +405,7 @@ ppt: application/mspowerpoint
 ppt: application/powerpoint
 ppt: application/vnd.ms-powerpoint
 ppt: application/x-mspowerpoint
+pptx: application/vnd.openxmlformats-officedocument.presentationml.presentation
 ppz: application/mspowerpoint
 pre: application/x-freelance
 prt: application/pro_eng
@@ -407,6 +431,7 @@ ras: application/x-cmu-raster
 ras: image/cmu-raster
 ras: image/x-cmu-raster
 rast: image/cmu-raster
+rar: application/x-rar-compressed
 rexx: text/x-script.rexx
 rf: image/vnd.rn-realflash
 rgb: image/x-rgb
@@ -488,6 +513,7 @@ sv4cpio: application/x-sv4cpio
 sv4crc: application/x-sv4crc
 svf: image/vnd.dwg
 svf: image/x-dwg
+svg: image/svg+xml
 svr: application/x-world
 svr: x-world/x-svr
 swf: application/x-shockwave-flash
@@ -511,9 +537,11 @@ tif: image/x-tiff
 tiff: image/tiff
 tiff: image/x-tiff
 tr: application/x-troff
+ts: application/typescript
 tsi: audio/tsp-audio
 tsp: application/dsptype
 tsp: audio/tsplayer
+ttf: font/ttf
 tsv: text/tab-separated-values
 turbot: image/florian
 txt: text/plain
@@ -561,6 +589,9 @@ wav: audio/x-wav
 wb1: application/x-qpro
 wbmp: image/vnd.wap.wbmp
 web: application/vnd.xara
+weba: audio/webm
+webm: video/webm
+webp: image/webp
 wiz: application/msword
 wk1: application/x-123
 wmf: windows/metafile
@@ -569,6 +600,8 @@ wmlc: application/vnd.wap.wmlc
 wmls: text/vnd.wap.wmlscript
 wmlsc: application/vnd.wap.wmlscriptc
 word: application/msword
+woff: font/woff
+woff2: font/woff2
 wp: application/wordperfect
 wp5: application/wordperfect
 wp5: application/wordperfect6.0
@@ -591,6 +624,7 @@ xbm: image/x-xbm
 xbm: image/xbm
 xdr: video/x-amt-demorun
 xgz: xgl/drawing
+xhtml: application/xhtml+xml
 xif: image/vnd.xiff
 xl: application/excel
 xla: application/excel
@@ -616,6 +650,7 @@ xls: application/excel
 xls: application/vnd.ms-excel
 xls: application/x-excel
 xls: application/x-msexcel
+xlsx: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 xlt: application/excel
 xlt: application/x-excel
 xlv: application/excel
@@ -633,6 +668,7 @@ xpm: image/x-xpixmap
 xpm: image/xpm
 x-png: image/png
 xsr: video/x-amt-showrun
+xul: application/vnd.mozilla.xul+xml
 xwd: image/x-xwd
 xwd: image/x-xwindowdump
 xyz: chemical/x-pdb
