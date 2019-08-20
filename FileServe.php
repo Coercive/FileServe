@@ -9,6 +9,10 @@ use Exception;
  * @package 	Coercive\Utility\FileServe
  * @link		https://github.com/Coercive/FileServe
  *
+ * MimeType detection by ralouphie/mimey
+ * @author ralouphie
+ * @link https://github.com/ralouphie
+ *
  * @author  	Anthony Moral <contact@coercive.fr>
  * @copyright   (c) 2019
  * @license 	MIT
