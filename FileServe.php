@@ -132,11 +132,19 @@ class FileServe
 	 * 214MB file downloaded only 128MB before a fatal PHP error was thrown,
 	 * complaining about memory being exhausted.
 	 *
+	 * @param bool $end [optional]
 	 * @return void
 	 */
-	private function cleanBuffer()
+	private function cleanBuffer(bool $end = false)
 	{
-		@ob_end_clean();
+		if (ob_get_length()) {
+			if($end) {
+				@ob_end_clean();
+			}
+			else {
+				@ob_clean();
+			}
+		}
 	}
 
 	/**
@@ -147,8 +155,9 @@ class FileServe
 	private function headerNoCache()
 	{
 		header('Pragma: public');
+		header('Pragma: no-cache');
 		header('Expires: 0');
-		header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+		header('Cache-Control: no-store, no-cache, must-revalidate, post-check=0, pre-check=0');
 		header('Cache-Control: private', false);
 	}
 
@@ -166,14 +175,14 @@ class FileServe
 	/**
 	 * HEADER : content disposition
 	 *
-	 * @param bool $forceDownload [optional]
+	 * @param bool $attachment [optional]
 	 * @param string $filename [optional]
 	 */
-	private function headerContentDisposition(bool $forceDownload = true, string $filename = '')
+	private function headerContentDisposition(bool $attachment = true, string $filename = '')
 	{
-		$header = 'Content-Disposition:';
+		$header = 'Content-Disposition: ';
 		$options = [];
-		if ($forceDownload) {
+		if ($attachment) {
 			$options[] = 'attachment';
 		}
 		if($this->filename) {
@@ -185,7 +194,7 @@ class FileServe
 			}
 		}
 		if($options) {
-			header('Content-Disposition: ' . implode('; ', $options));
+			header($header . implode('; ', $options));
 		}
 	}
 
@@ -220,8 +229,8 @@ class FileServe
 	 */
 	private function headerEtag()
 	{
-		$etag = $this->etag(true);
-		if($etag) { header("Etag:  $etag"); }
+		$etag = $this->etag();
+		if($etag) { header('Etag: "' . $etag . '"'); }
 	}
 
 	/**
@@ -316,10 +325,10 @@ class FileServe
 	private function recurseBufferLoop(int $end, int $buffer = 8192)
 	{
 		# End of file
-		if(@feof($this->get())) { return; }
+		if(@feof($this->resource)) { return; }
 
 		# Check if we have outputted all the data requested
-		$position = ftell($this->get());
+		$position = ftell($this->resource);
 		if($position > $end) { return; }
 
 		# In case we're only outputtin a chunk, make sure we don't read past the length
@@ -329,7 +338,7 @@ class FileServe
 		set_time_limit(0);
 
 		# Read the file part
-		$chunk = fread($this->get(), $buffer);
+		$chunk = fread($this->resource, $buffer);
 		if(false === $chunk) { throw new Exception('Read file chunk error : stop process'); }
 		echo $chunk;
 
@@ -366,16 +375,6 @@ class FileServe
 
 		# Close
 		if(!fclose($this->resource)) { throw new Exception("Can't close file : $this->path."); }
-	}
-
-	/**
-	 * GET R FILE
-	 *
-	 * @return resource
-	 */
-	private function get(): resource
-	{
-		return $this->resource;
 	}
 
 	/**
@@ -470,20 +469,13 @@ class FileServe
 	 * @link http://en.wikipedia.org/wiki/HTTP_ETag
 	 * @link http://blogs.msdn.com/b/ieinternals/archive/2011/06/03/send-an-etag-to-enable-http-206-file-download-resume-without-restarting.aspx
 	 *
-	 * @param bool $quote [optional]
 	 * @return string
 	 */
-	public function etag(bool $quote = true): string
+	public function etag(): string
 	{
-		# Get Infos
 		$info = stat($this->path);
 		if (!$info || !isset($info['ino']) || !isset($info['size']) || !isset($info['mtime'])) { return ''; }
-
-		# Additionnal Quotes
-		$q = ($quote) ? '"' : '';
-
-		# Etag
-		return sprintf("$q%x-%x-%x$q", $info['ino'], $info['size'], $info['mtime']);
+		return sprintf('%x-%x-%x', $info['ino'], $info['size'], $info['mtime']);
 	}
 
 	/**
@@ -494,20 +486,35 @@ class FileServe
 	 */
 	public function serve(string $filename = '')
 	{
-		# Headers
-		if(!$this->cache) { $this->headerNoCache(); }
+		# Empty and close buffer
+		$this->cleanBuffer(true);
+
+		# Content headers
 		$this->headerContentDescription();
 		$this->headerContentTransferEncoding();
 		$this->headerContentType($filename);
 		$this->headerContentLength();
-		$this->headerEtag();
 
-		# Skip if file as not modified since last client cache
-		if(!$this->headerLastModified()) { return; }
+		# Send force no cache headers
+		if(!$this->cache) {
+			$this->headerNoCache();
+		}
+
+		# Active cache handler
+		else {
+
+			# Skip if file as not modified since last client cache
+			if(!$this->headerLastModified()) {
+				return;
+			}
+
+			# ETag only if cache active
+			$this->headerEtag();
+		}
 
 		# Read the file
 		readfile($this->path);
-		$this->cleanBuffer();
+		flush();
 	}
 
 	/**
@@ -515,36 +522,57 @@ class FileServe
 	 *
 	 * @link https://tn123.org/mod_xsendfile/
 	 *
+	 * @param bool $attachment [optional]
+	 * @param string $filename [optional]
 	 * @return void
 	 */
-	public function XSendFile(bool $forceDownload = true, string $filename = '')
+	public function XSendFile(bool $attachment = true, string $filename = '')
 	{
+		$this->cleanBuffer(true);
 		header('X-Sendfile: ' . $this->path);
 		header('Content-Type: application/octet-stream');
-		$this->headerContentDisposition($forceDownload, $filename);
-		$this->cleanBuffer();
+		$this->headerContentDisposition($attachment, $filename);
 	}
 
 	/**
 	 * Send file for download
 	 *
-	 * @param bool $forceDownload [optional]
+	 * @param bool $attachment [optional]
 	 * @param string $filename [optional]
 	 * @return void
 	 */
-	public function download(bool $forceDownload = true, string $filename = '')
+	public function download(bool $attachment = true, string $filename = '')
 	{
-		if(!$this->cache) { $this->headerNoCache(); }
+		# Empty and close buffer
+		$this->cleanBuffer(true);
+
+		# Content headers
 		$this->headerContentDescription();
 		$this->headerContentTransferEncoding();
 		$this->headerContentType($filename);
 		$this->headerContentLength();
-		$this->headerEtag();
-		$this->headerContentDisposition($forceDownload, $filename);
+		$this->headerContentDisposition($attachment, $filename);
+
+		# Send force no cache headers
+		if(!$this->cache) {
+			$this->headerNoCache();
+		}
+
+		# Active cache handler
+		else {
+
+			# Skip if file as not modified since last client cache
+			if(!$this->headerLastModified()) {
+				return;
+			}
+
+			# ETag only if cache active
+			$this->headerEtag();
+		}
 
 		# Read the file
 		readfile($this->path);
-		$this->cleanBuffer();
+		flush();
 	}
 
 	/**
@@ -614,7 +642,7 @@ class FileServe
 		$this->open();
 
 		# Init pointer start
-		fseek($this->get(), $startByte);
+		fseek($this->resource, $startByte);
 
 		/*
 		 * Ensure output buffering is off. It appeared to yield 1 on an default WAMP
