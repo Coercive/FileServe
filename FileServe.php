@@ -96,7 +96,7 @@ class FileServe
 		// If the range starts with an '-' we start from the beginning.
 		// If not, we forward the file pointer and make sure to get the end byte
 		// if spesified.
-		if ($ranges{0} === '-') {
+		if ($ranges[0] === '-') {
 			// The n-number of the last bytes is requested.
 			$lastBytes = (int) substr($ranges, 1);
 			$range['start'] = $this->getSize() - $lastBytes;
