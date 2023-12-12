@@ -5,7 +5,7 @@ use Exception;
 
 /**
  * ServeFile
- * 
+ *
  * @package 	Coercive\Utility\FileServe
  * @link		https://github.com/Coercive/FileServe
  *
@@ -20,19 +20,22 @@ use Exception;
 class FileServe
 {
 	/** @var string FILE PATH */
-	private $path = '';
+	private string $path;
 
-	/** @var int FILE SIZE */
-	private $size = null;
+	/** @var int|null FILE SIZE */
+	private ? int $size = null;
 
 	/** @var resource FILE */
 	private $resource = null;
 
 	/** @var bool Active the no cache header */
-	private $cache = false;
+	private bool $cache = false;
 
 	/** @var bool Active the no-named file */
-	private $filename = true;
+	private bool $filename = true;
+
+	/** @var string custom Content-Type */
+	private string $headerContentType = '';
 
 	/**
 	 * CLEAN PATH
@@ -216,7 +219,8 @@ class FileServe
 	 */
 	private function headerContentType(string $filename = '')
 	{
-		header("Content-Type: {$this->mimeType($filename)}");
+		$type = $this->headerContentType ?: $this->mimeType($filename);
+		header('Content-Type: ' . $type);
 	}
 
 	/**
@@ -325,21 +329,29 @@ class FileServe
 	private function recurseBufferLoop(int $end, int $buffer = 8192)
 	{
 		# End of file
-		if(@feof($this->resource)) { return; }
+		if(@feof($this->resource)) {
+			return;
+		}
 
 		# Check if we have outputted all the data requested
 		$position = ftell($this->resource);
-		if($position > $end) { return; }
+		if($position > $end) {
+			return;
+		}
 
 		# In case we're only outputtin a chunk, make sure we don't read past the length
-		if ($position + $buffer > $end) { $buffer = $end - $position + 1; }
+		if ($position + $buffer > $end) {
+			$buffer = $end - $position + 1;
+		}
 
 		# Reset time limit for big files
 		set_time_limit(0);
 
 		# Read the file part
 		$chunk = fread($this->resource, $buffer);
-		if(false === $chunk) { throw new Exception('Read file chunk error : stop process'); }
+		if(false === $chunk) {
+			throw new Exception('Read file chunk error : stop process');
+		}
 		echo $chunk;
 
 		# Free up memory. Otherwise large files will trigger PHP's memory limit.
@@ -359,7 +371,9 @@ class FileServe
 	private function open()
 	{
 		$this->resource = @fopen($this->path, 'rb');
-		if(false === $this->resource) { throw new Exception("Can't open file : $this->path."); }
+		if(false === $this->resource) {
+			throw new Exception("Can't open file : $this->path.");
+		}
 	}
 
 	/**
@@ -371,10 +385,14 @@ class FileServe
 	private function close()
 	{
 		# Verify
-		if(!$this->resource) { return; }
+		if(!$this->resource) {
+			return;
+		}
 
 		# Close
-		if(!fclose($this->resource)) { throw new Exception("Can't close file : $this->path."); }
+		if(!fclose($this->resource)) {
+			throw new Exception("Can't close file : $this->path.");
+		}
 	}
 
 	/**
@@ -446,6 +464,18 @@ class FileServe
 	public function disableFilename(): FileServe
 	{
 		$this->filename = false;
+		return $this;
+	}
+
+	/**
+	 * Custom Content-Type
+	 *
+	 * @param string $type
+	 * @return FileServe
+	 */
+	public function setHeaderContentType(string $type): FileServe
+	{
+		$this->headerContentType = $type;
 		return $this;
 	}
 
@@ -577,7 +607,7 @@ class FileServe
 
 	/**
 	 * Send range bytes of file for client
-	 * 
+	 *
 	 * @return void
 	 * @throws Exception
 	 */
